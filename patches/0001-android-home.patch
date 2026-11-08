@@ -1,0 +1,164 @@
+diff --git a/misc.c b/misc.c
+index d49c710..dce5ff9 100644
+--- a/misc.c
++++ b/misc.c
+@@ -1278,6 +1278,9 @@ tilde_expand(const char *filename, uid_t uid, char **retp)
+ 	char *ocopy = NULL, *copy, *s = NULL;
+ 	const char *path = NULL, *user = NULL;
+ 	struct passwd *pw;
++#ifdef __ANDROID__
++	struct passwd *apw = NULL;
++#endif
+ 	size_t len;
+ 	int ret = -1, r, slash;
+ 
+@@ -1317,6 +1320,14 @@ tilde_expand(const char *filename, uid_t uid, char **retp)
+ 		error_f("No such uid %ld", (long)uid);
+ 		goto out;
+ 	}
++#ifdef __ANDROID__
++	if (user == NULL) {
++		if ((apw = pwcopy(pw)) == NULL)
++			goto out;
++		android_override_pw_dir(apw);
++		pw = apw;
++	}
++#endif
+ 
+ 	/* Make sure directory has a trailing '/' */
+ 	slash = (len = strlen(pw->pw_dir)) == 0 || pw->pw_dir[len - 1] != '/';
+@@ -1337,6 +1348,10 @@ tilde_expand(const char *filename, uid_t uid, char **retp)
+  out:
+ 	free(s);
+ 	free(ocopy);
++#ifdef __ANDROID__
++	if (apw != NULL)
++		pwfree(apw);
++#endif
+ 	return ret;
+ }
+ 
+@@ -3250,9 +3265,39 @@ signal_is_crash(int sig)
+ 	return 0;
+ }
+ 
++#ifdef __ANDROID__
++/*
++ * This Android build keeps all client state under a fixed directory.
++ * bionic reports "/" as the pw_dir for root/shell, and adb shell's $HOME
++ * is not reliable, so use SSH_ANDROID_HOME if set and this fixed path
++ * otherwise.
++ */
++char *
++android_home(void)
++{
++	const char *home = getenv("SSH_ANDROID_HOME");
++
++	if (home != NULL && *home != '\0')
++		return xstrdup(home);
++	return xstrdup("/data/local/tmp/home");
++}
++
++void
++android_override_pw_dir(struct passwd *pw)
++{
++	if (pw == NULL)
++		return;
++	free(pw->pw_dir);
++	pw->pw_dir = android_home();
++}
++#endif
++
+ char *
+ get_homedir(void)
+ {
++#ifdef __ANDROID__
++	return android_home();
++#else
+ 	char *cp;
+ 	struct passwd *pw;
+ 
+@@ -3263,6 +3308,7 @@ get_homedir(void)
+ 		return xstrdup(pw->pw_dir);
+ 
+ 	return NULL;
++#endif
+ }
+ 
+ int
+diff --git a/misc.h b/misc.h
+index 0784f37..eea8715 100644
+--- a/misc.h
++++ b/misc.h
+@@ -114,6 +114,10 @@ int	 path_absolute(const char *);
+ int	 stdfd_devnull(int, int, int);
+ int	 lib_contains_symbol(const char *, const char *);
+ char	*get_homedir(void);
++#ifdef __ANDROID__
++char	*android_home(void);
++void	 android_override_pw_dir(struct passwd *);
++#endif
+ int	 mkdir_path(const char *, mode_t);
+ 
+ void	 sock_set_v6only(int);
+diff --git a/ssh-add.c b/ssh-add.c
+index 515272a..7953539 100644
+--- a/ssh-add.c
++++ b/ssh-add.c
+@@ -1038,6 +1038,14 @@ main(int argc, char **argv)
+ 			ret = 1;
+ 			goto done;
+ 		}
++#ifdef __ANDROID__
++		if ((pw = pwcopy(pw)) == NULL) {
++			fprintf(stderr, "pwcopy failed\n");
++			ret = 1;
++			goto done;
++		}
++		android_override_pw_dir(pw);
++#endif
+ 
+ 		for (i = 0; default_files[i]; i++) {
+ 			snprintf(buf, sizeof(buf), "%s/%s", pw->pw_dir,
+diff --git a/ssh-agent.c b/ssh-agent.c
+index 9951345..aaa8807 100644
+--- a/ssh-agent.c
++++ b/ssh-agent.c
+@@ -2291,6 +2291,9 @@ main(int ac, char **av)
+ 	if ((pw = getpwuid(getuid())) == NULL)
+ 		fatal("No user exists for uid %lu", (u_long)getuid());
+ 	pw = pwcopy(pw);
++#ifdef __ANDROID__
++	android_override_pw_dir(pw);
++#endif
+ 
+ #ifdef RLIMIT_NOFILE
+ 	if (getrlimit(RLIMIT_NOFILE, &rlim) == -1)
+diff --git a/ssh-keygen.c b/ssh-keygen.c
+index 5c2d645..33a1ffb 100644
+--- a/ssh-keygen.c
++++ b/ssh-keygen.c
+@@ -3395,6 +3395,9 @@ main(int argc, char **argv)
+ 	if (!pw)
+ 		fatal("No user exists for uid %lu", (u_long)getuid());
+ 	pw = pwcopy(pw);
++#ifdef __ANDROID__
++	android_override_pw_dir(pw);
++#endif
+ 	if (gethostname(hostname, sizeof(hostname)) == -1)
+ 		fatal("gethostname: %s", strerror(errno));
+ 
+diff --git a/ssh.c b/ssh.c
+index fe660ef..dadd4e2 100644
+--- a/ssh.c
++++ b/ssh.c
+@@ -668,6 +668,9 @@ main(int ac, char **av)
+ 	}
+ 	/* Take a copy of the returned structure. */
+ 	pw = pwcopy(pw);
++#ifdef __ANDROID__
++	android_override_pw_dir(pw);
++#endif
+ 
+ 	/*
+ 	 * Set our umask to something reasonable, as some files are created

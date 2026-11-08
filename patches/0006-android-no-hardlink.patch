@@ -1,0 +1,81 @@
+diff --git a/hostfile.c b/hostfile.c
+index 033b291..d102388 100644
+--- a/hostfile.c
++++ b/hostfile.c
+@@ -729,6 +729,16 @@ hostfile_replace_entries(const char *filename, const char *host, const char *ip,
+ 			r = SSH_ERR_SYSTEM_ERROR;
+ 			goto fail;
+ 		}
++#ifdef __ANDROID__
++		/* Android denies hard links under /data/local/tmp. */
++		if (rename(filename, back) == -1) {
++			oerrno = errno;
++			error_f("rename %.100s to %.100s: %s", filename,
++			    back, strerror(errno));
++			r = SSH_ERR_SYSTEM_ERROR;
++			goto fail;
++		}
++#else
+ 		if (link(filename, back) == -1) {
+ 			oerrno = errno;
+ 			error_f("link %.100s to %.100s: %s", filename,
+@@ -736,6 +746,7 @@ hostfile_replace_entries(const char *filename, const char *host, const char *ip,
+ 			r = SSH_ERR_SYSTEM_ERROR;
+ 			goto fail;
+ 		}
++#endif
+ 		if (rename(temp, filename) == -1) {
+ 			oerrno = errno;
+ 			error_f("rename \"%s\" to \"%s\": %s", temp,
+diff --git a/mux.c b/mux.c
+index e774938..6378af9 100644
+--- a/mux.c
++++ b/mux.c
+@@ -1373,6 +1373,18 @@ muxserver_listen(struct ssh *ssh)
+ 	}
+ 
+ 	/* Now atomically "move" the mux socket into position */
++#ifdef __ANDROID__
++	/* Android denies hard links under /data/local/tmp. */
++	if (access(orig_control_path, F_OK) == 0) {
++		error("ControlSocket %s already exists, disabling multiplexing",
++		    orig_control_path);
++		unlink(options.control_path);
++		goto disable_mux_master;
++	} else if (rename(options.control_path, orig_control_path) == -1) {
++		fatal_f("rename mux listener %s => %s: %s",
++		    options.control_path, orig_control_path, strerror(errno));
++	}
++#else
+ 	if (link(options.control_path, orig_control_path) != 0) {
+ 		if (errno != EEXIST) {
+ 			fatal_f("link mux listener %s => %s: %s",
+@@ -1385,6 +1397,7 @@ muxserver_listen(struct ssh *ssh)
+ 		goto disable_mux_master;
+ 	}
+ 	unlink(options.control_path);
++#endif
+ 	free(options.control_path);
+ 	options.control_path = orig_control_path;
+ 
+diff --git a/ssh-keygen.c b/ssh-keygen.c
+index 33a1ffb..54131f7 100644
+--- a/ssh-keygen.c
++++ b/ssh-keygen.c
+@@ -1359,9 +1359,16 @@ do_known_hosts(struct passwd *pw, const char *name, int find_host,
+ 		/* Backup existing file */
+ 		if (unlink(old) == -1 && errno != ENOENT)
+ 			fatal("unlink %.100s: %s", old, strerror(errno));
++#ifdef __ANDROID__
++		/* Android denies hard links under /data/local/tmp. */
++		if (rename(identity_file, old) == -1)
++			fatal("rename %.100s to %.100s: %s", identity_file, old,
++			    strerror(errno));
++#else
+ 		if (link(identity_file, old) == -1)
+ 			fatal("link %.100s to %.100s: %s", identity_file, old,
+ 			    strerror(errno));
++#endif
+ 		/* Move new one into place */
+ 		if (rename(tmp, identity_file) == -1) {
+ 			error("rename\"%s\" to \"%s\": %s", tmp, identity_file,

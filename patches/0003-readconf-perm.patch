@@ -1,0 +1,16 @@
+diff --git a/readconf.c b/readconf.c
+index 9b557de..0a5ef25 100644
+--- a/readconf.c
++++ b/readconf.c
+@@ -2649,9 +2649,8 @@ read_config_file_depth(const char *filename, struct passwd *pw,
+ 
+ 		if (fstat(fileno(f), &sb) == -1)
+ 			fatal("fstat %s: %s", filename, strerror(errno));
+-		if (((sb.st_uid != 0 && sb.st_uid != getuid()) ||
+-		    (sb.st_mode & 022) != 0))
+-			fatal("Bad owner or permissions on %s", filename);
++		if ((sb.st_mode & 022) != 0)
++			fatal("Bad permissions on %s (file is writable by group or others)", filename);
+ 	}
+ 
+ 	debug("Reading configuration data %.200s", filename);

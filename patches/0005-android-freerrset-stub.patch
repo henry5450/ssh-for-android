@@ -1,0 +1,17 @@
+diff --git a/openbsd-compat/getrrsetbyname.c b/openbsd-compat/getrrsetbyname.c
+index b2efa20..e42cab8 100644
+--- a/openbsd-compat/getrrsetbyname.c
++++ b/openbsd-compat/getrrsetbyname.c
+@@ -63,6 +63,12 @@ getrrsetbyname(const char *hostname, unsigned int rdclass, unsigned int rdtype,
+ 		*res = NULL;
+ 	return ERRSET_FAIL;
+ }
++
++void
++freerrset(struct rrsetinfo *rrset)
++{
++	/* Nothing was allocated by the Android stub. */
++}
+ #else /* !__ANDROID__ */
+ 
+ #include <stdlib.h>

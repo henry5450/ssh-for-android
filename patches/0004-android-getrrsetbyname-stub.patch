@@ -1,0 +1,33 @@
+diff --git a/openbsd-compat/getrrsetbyname.c b/openbsd-compat/getrrsetbyname.c
+index 36e558c..b2efa20 100644
+--- a/openbsd-compat/getrrsetbyname.c
++++ b/openbsd-compat/getrrsetbyname.c
+@@ -49,6 +49,22 @@
+ 
+ #if !defined (HAVE_GETRRSETBYNAME) && !defined (HAVE_LDNS)
+ 
++#ifdef __ANDROID__
++/*
++ * bionic's <resolv.h> does not expose the BIND resolver state that this
++ * compatibility implementation needs. SSHFP-over-DNS is optional and off
++ * by default (VerifyHostKeyDNS), so report a lookup failure instead.
++ */
++int
++getrrsetbyname(const char *hostname, unsigned int rdclass, unsigned int rdtype,
++    unsigned int flags, struct rrsetinfo **res)
++{
++	if (res != NULL)
++		*res = NULL;
++	return ERRSET_FAIL;
++}
++#else /* !__ANDROID__ */
++
+ #include <stdlib.h>
+ #include <string.h>
+ 
+@@ -646,4 +662,5 @@ count_dns_rr(struct dns_rr *p, u_int16_t class, u_int16_t type)
+ 	return (n);
+ }
+ 
++#endif /* !__ANDROID__ */
+ #endif /*  !defined (HAVE_GETRRSETBYNAME) && !defined (HAVE_LDNS) */

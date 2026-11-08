@@ -1,0 +1,29 @@
+diff --git a/openbsd-compat/explicit_bzero.c b/openbsd-compat/explicit_bzero.c
+index 68cd2c1..55426cb 100644
+--- a/openbsd-compat/explicit_bzero.c
++++ b/openbsd-compat/explicit_bzero.c
+@@ -36,10 +36,13 @@ explicit_bzero(void *p, size_t n)
+ #else /* HAVE_MEMSET_S */
+ 
+ /*
+- * Indirect bzero through a volatile pointer to hopefully avoid
++ * Indirect memset through a volatile pointer to hopefully avoid
+  * dead-store optimisation eliminating the call.
++ *
++ * Android/bionic has no bzero symbol (it is an inline macro), so use
++ * memset instead.
+  */
+-static void (* volatile ssh_bzero)(void *, size_t) = bzero;
++static void* (* volatile ssh_memset)(void *, int, size_t) = memset;
+ 
+ void
+ explicit_bzero(void *p, size_t n)
+@@ -57,7 +60,7 @@ explicit_bzero(void *p, size_t n)
+ # endif
+ #endif
+ 
+-	ssh_bzero(p, n);
++	ssh_memset(p, 0, n);
+ }
+ 
+ #endif /* HAVE_MEMSET_S */
